@@ -1,0 +1,7 @@
+AI memory stores previous user preferences, project notes, decisions, summaries, or conversations as searchable records. At inference time, Pinecone retrieves relevant memories and the model uses them to answer with continuity.
+Azure Pinecone Chat is a retrieval-augmented generation demo deployed by Azure DevOps.
+The public homepage is a browser chat interface hosted by Azure App Service.
+Each chat question is embedded with OpenAI text-embedding-3-small using 1024 dimensions.
+The resulting vector is searched against a Pinecone serverless index named azure-pinecone-chat-1024.
+The deployment pipeline creates or validates the Pinecone index, ingests sample documents, builds the Docker image in Azure Container Registry, deploys Azure App Service, and runs a health check.
+The assistant can answer questions about its architecture, deployment pipeline, OpenAI embedding configuration, and Pinecone index configuration from the indexed sample data.

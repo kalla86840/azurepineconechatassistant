@@ -1,0 +1,13 @@
+.env
+.env.*
+!.env.example
+.git
+.venv
+.venv*/
+__pycache__/
+*.pyc
+.pytest_cache/
+_zipcheck_*/
+_zip_review_*/
+aml/*.rendered.yml
+aml/*.rendered.yaml

@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+.venv*/
+venv/
+env/
+ENV/
+
+# Local secrets and environment files
+.env
+.env.*
+!.env.example
+
+# Azure ML rendered deployment artifacts
+aml/*.rendered.yml
+aml/*.rendered.yaml
+
+# Build and packaging outputs
+build/
+dist/
+*.egg-info/
+_zipcheck_*/
+_zip_review_*/
+_zip_scan_*/
+
+# Logs
+*.log
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -1,0 +1,10 @@
+Edgio Q3 2023 Earnings Call Transcript
+
+This sample document is included only to show where source text files should live.
+Replace this file or add more .txt files in this folder before running the
+ingestion script.
+
+In a Pinecone RAG workflow, documents are split into chunks, embedded with Azure
+OpenAI, and upserted into Pinecone with metadata. The Azure ML endpoint then
+retrieves matching chunks from Pinecone and asks the Azure OpenAI chat deployment
+to answer using those retrieved chunks.

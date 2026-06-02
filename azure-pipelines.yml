@@ -1,0 +1,160 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pr:
+  branches:
+    include:
+      - main
+
+variables:
+  pythonVersion: '3.11'
+  azureServiceConnection: 'AIOPs'
+  azureLocation: 'eastus'
+  azureResourceGroup: 'azure-pinecone-chat-rg'
+  acrName: 'azurepineconechatacr'
+  appServicePlan: 'azure-pinecone-chat-plan'
+  webAppName: 'azure-pinecone-chat-86840'
+  imageRepository: 'azure-pinecone-chat'
+  pineconeIndex: 'azure-pinecone-chat-1024'
+  pineconeNamespace: 'knowledge'
+  pineconeCloud: 'aws'
+  pineconeRegion: 'us-east-1'
+  embeddingModel: 'text-embedding-3-small'
+  embeddingDimensions: '1024'
+  openAIModel: 'gpt-5.5'
+
+stages:
+  - stage: CI
+    displayName: Test
+    jobs:
+      - job: Test
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: $(pythonVersion)
+          - script: |
+              python -m pip install --upgrade pip
+              pip install -r requirements.txt
+              python -m pytest -q tests
+            env:
+              PYTHONPATH: $(System.DefaultWorkingDirectory)
+            displayName: Run unit tests
+
+  - stage: Deploy
+    displayName: Deploy App Service chat
+    dependsOn: CI
+    condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+    jobs:
+      - job: Deploy
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: $(pythonVersion)
+
+          - task: AzureCLI@2
+            displayName: Build, configure, deploy, and smoke test
+            inputs:
+              azureSubscription: $(azureServiceConnection)
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                set -euo pipefail
+
+                for name in PINECONE_API_KEY OPENAI_API_KEY; do
+                  if [[ -z "${!name:-}" || "${!name}" == '$('* ]]; then
+                    echo "Secret pipeline variable $name is required."
+                    exit 1
+                  fi
+                done
+
+                python -m pip install --upgrade pip
+                pip install -r requirements.txt
+
+                export PINECONE_INDEX="$(pineconeIndex)"
+                export PINECONE_NAMESPACE="$(pineconeNamespace)"
+                export AZURE_OPENAI_EMBEDDING_DEPLOYMENT="$(embeddingModel)"
+                export AZURE_OPENAI_EMBEDDING_DIMENSIONS="$(embeddingDimensions)"
+                export OPENAI_MODEL="$(openAIModel)"
+
+                PINECONE_HOST="$(python -m app.pinecone_client --cloud "$(pineconeCloud)" --region "$(pineconeRegion)")"
+                export PINECONE_HOST
+                python -m app.embeddings --docs-dir docs
+
+                az group create --name "$(azureResourceGroup)" --location "$(azureLocation)"
+                if ! az acr show --name "$(acrName)" --resource-group "$(azureResourceGroup)" >/dev/null 2>&1; then
+                  az acr create --name "$(acrName)" --resource-group "$(azureResourceGroup)" --sku Basic --admin-enabled true
+                fi
+                az acr update --name "$(acrName)" --admin-enabled true
+                az acr build \
+                  --registry "$(acrName)" \
+                  --image "$(imageRepository):$(Build.BuildId)" \
+                  --build-arg BUILD_ID="$(Build.BuildId)" \
+                  --file Dockerfile \
+                  .
+
+                if ! az appservice plan show --name "$(appServicePlan)" --resource-group "$(azureResourceGroup)" >/dev/null 2>&1; then
+                  az appservice plan create \
+                    --name "$(appServicePlan)" \
+                    --resource-group "$(azureResourceGroup)" \
+                    --location "$(azureLocation)" \
+                    --is-linux \
+                    --sku B1
+                fi
+
+                IMAGE="$(acrName).azurecr.io/$(imageRepository):$(Build.BuildId)"
+                if ! az webapp show --name "$(webAppName)" --resource-group "$(azureResourceGroup)" >/dev/null 2>&1; then
+                  az webapp create \
+                    --name "$(webAppName)" \
+                    --resource-group "$(azureResourceGroup)" \
+                    --plan "$(appServicePlan)" \
+                    --deployment-container-image-name "$IMAGE"
+                fi
+
+                ACR_USERNAME="$(az acr credential show --name "$(acrName)" --query username --output tsv)"
+                ACR_PASSWORD="$(az acr credential show --name "$(acrName)" --query 'passwords[0].value' --output tsv)"
+                az webapp config container set \
+                  --name "$(webAppName)" \
+                  --resource-group "$(azureResourceGroup)" \
+                  --container-image-name "$IMAGE" \
+                  --container-registry-url "https://$(acrName).azurecr.io" \
+                  --container-registry-user "$ACR_USERNAME" \
+                  --container-registry-password "$ACR_PASSWORD"
+
+                az webapp config appsettings set \
+                  --name "$(webAppName)" \
+                  --resource-group "$(azureResourceGroup)" \
+                  --settings \
+                    WEBSITES_PORT=8000 \
+                    APP_NAME=azure-pinecone-chat \
+                    PINECONE_API_KEY="$PINECONE_API_KEY" \
+                    PINECONE_HOST="$PINECONE_HOST" \
+                    PINECONE_INDEX="$PINECONE_INDEX" \
+                    PINECONE_NAMESPACE="$PINECONE_NAMESPACE" \
+                    OPENAI_API_KEY="$OPENAI_API_KEY" \
+                    OPENAI_MODEL="$OPENAI_MODEL" \
+                    AZURE_OPENAI_EMBEDDING_DEPLOYMENT="$AZURE_OPENAI_EMBEDDING_DEPLOYMENT" \
+                    AZURE_OPENAI_EMBEDDING_DIMENSIONS="$AZURE_OPENAI_EMBEDDING_DIMENSIONS"
+
+                az webapp restart --name "$(webAppName)" --resource-group "$(azureResourceGroup)"
+                CHAT_URL="https://$(webAppName).azurewebsites.net"
+                for attempt in $(seq 1 30); do
+                  if curl --fail --silent --show-error "$CHAT_URL/health"; then
+                    echo
+                    echo "Chat webpage: $CHAT_URL"
+                    echo "##vso[task.setvariable variable=CHAT_URL]$CHAT_URL"
+                    exit 0
+                  fi
+                  echo "Waiting for App Service startup. Attempt $attempt/30."
+                  sleep 10
+                done
+                echo "App Service did not become healthy: $CHAT_URL/health"
+                exit 1
+            env:
+              OPENAI_API_KEY: $(OPENAI_API_KEY)
+              PINECONE_API_KEY: $(PINECONE_API_KEY)
