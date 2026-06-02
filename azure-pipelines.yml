@@ -11,7 +11,7 @@ pr:
 variables:
   pythonVersion: '3.11'
   azureServiceConnection: 'AIOPs'
-  azureLocation: 'eastus'
+  azureLocation: 'westus'
   azureResourceGroup: 'azure-pinecone-chat-rg'
   acrName: 'azurepineconechatacr'
   appServicePlan: 'azure-pinecone-chat-plan'
