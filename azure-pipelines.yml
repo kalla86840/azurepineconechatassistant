@@ -12,6 +12,7 @@ variables:
   pythonVersion: '3.11'
   azureServiceConnection: 'AIOPs'
   azureLocation: 'westus2'
+  azureAppServiceLocations: 'westus3 westcentralus westus2 westus'
   azureResourceGroup: 'azure-pinecone-chat-rg'
   acrName: 'azurepineconechatacr'
   appServicePlan: 'azure-pinecone-chat-plan'
@@ -99,12 +100,26 @@ stages:
                   .
 
                 if ! az appservice plan show --name "$(appServicePlan)" --resource-group "$(azureResourceGroup)" >/dev/null 2>&1; then
-                  az appservice plan create \
-                    --name "$(appServicePlan)" \
-                    --resource-group "$(azureResourceGroup)" \
-                    --location "$(azureLocation)" \
-                    --is-linux \
-                    --sku B1
+                  PLAN_CREATED=false
+                  for location in $(azureAppServiceLocations); do
+                    echo "Trying Linux App Service plan in $location."
+                    if az appservice plan create \
+                      --name "$(appServicePlan)" \
+                      --resource-group "$(azureResourceGroup)" \
+                      --location "$location" \
+                      --is-linux \
+                      --sku B1; then
+                      PLAN_CREATED=true
+                      echo "Created App Service plan in $location."
+                      break
+                    fi
+                    echo "Could not create the App Service plan in $location. Trying the next western region."
+                  done
+
+                  if [[ "$PLAN_CREATED" != "true" ]]; then
+                    echo "No western region in '$(azureAppServiceLocations)' had quota for a B1 Linux App Service plan."
+                    exit 1
+                  fi
                 fi
 
                 IMAGE="$(acrName).azurecr.io/$(imageRepository):$(Build.BuildId)"
