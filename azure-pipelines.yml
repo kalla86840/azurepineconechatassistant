@@ -12,7 +12,7 @@ variables:
   pythonVersion: '3.11'
   azureServiceConnection: 'AIOPs'
   azureLocation: 'westus2'
-  azureAppServiceLocations: 'westus3 westcentralus westus2 westus'
+  azureAppServiceLocations: 'westus2 westus3 westcentralus westus'
   azureResourceGroup: 'azure-pinecone-chat-rg'
   acrName: 'azurepineconechatacr'
   appServicePlan: 'azure-pinecone-chat-plan'
