@@ -87,7 +87,12 @@ stages:
                 export PINECONE_HOST
                 python -m app.embeddings --docs-dir docs
 
-                az group create --name "$(azureResourceGroup)" --location "$(azureLocation)"
+                if ! az group show --name "$(azureResourceGroup)" >/dev/null 2>&1; then
+                  az group create --name "$(azureResourceGroup)" --location "$(azureLocation)"
+                else
+                  echo "Using existing resource group '$(azureResourceGroup)'."
+                fi
+
                 if ! az acr show --name "$(acrName)" --resource-group "$(azureResourceGroup)" >/dev/null 2>&1; then
                   az acr create --name "$(acrName)" --resource-group "$(azureResourceGroup)" --sku Basic --admin-enabled true
                 fi
